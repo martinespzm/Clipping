@@ -1,15 +1,19 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AscentRow } from '@/components/ascent-row';
 import { Ridge, Topo } from '@/components/topo';
-import { Card, Chip, Grade, SectionHeader, T } from '@/components/ui';
+import { Card, Chip, SectionHeader, T } from '@/components/ui';
 import { Fonts, Radius } from '@/constants/theme';
 import { useLocalWeather } from '@/hooks/use-local-weather';
 import { usePalette } from '@/hooks/use-palette';
-import { gradeRank, loadAscents, localDate, MONTH_NAMES, shortDate, type Ascent } from '@/lib/ascents';
+import { localDate, MONTH_NAMES } from '@/lib/ascents';
+import { displayGrade, gradeRank } from '@/lib/grades';
+import { firstName, initials } from '@/lib/profile';
+import { useAppData } from '@/providers/app-data';
 
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -17,14 +21,7 @@ export default function InicioScreen() {
   const c = usePalette();
   const insets = useSafeAreaInsets();
   const { state, reload } = useLocalWeather();
-  const [ascents, setAscents] = useState<Ascent[]>([]);
-
-  // Recargar el logbook cada vez que vuelves a esta pestaña (p. ej. tras guardar un ascenso).
-  useFocusEffect(
-    useCallback(() => {
-      loadAscents().then(setAscents);
-    }, []),
-  );
+  const { ascents, profile, systems } = useAppData();
 
   const now = new Date();
   const monthPrefix = localDate().slice(0, 7);
@@ -44,13 +41,19 @@ export default function InicioScreen() {
             <T variant="eyebrow" color={c.accent}>
               {DAYS[now.getDay()]} {now.getDate()} de {MONTH_NAMES[now.getMonth()]}
             </T>
-            <T variant="title" style={{ marginTop: 2 }}>Hola, escalador</T>
+            <T variant="title" style={{ marginTop: 2 }}>Hola, {firstName(profile)}</T>
           </View>
           <Pressable
             onPress={() => router.navigate('/perfil')}
             accessibilityLabel="Ir a tu perfil"
             style={[styles.avatar, { backgroundColor: c.accent }]}>
-            <Ionicons name="person" size={20} color={c.onAccent} />
+            {profile.avatarUrl ? (
+              <Image source={{ uri: profile.avatarUrl }} style={styles.avatarImg} />
+            ) : profile.name ? (
+              <T style={{ fontFamily: Fonts.bodyBold }} color={c.onAccent}>{initials(profile)}</T>
+            ) : (
+              <Ionicons name="person" size={20} color={c.onAccent} />
+            )}
           </Pressable>
         </View>
 
@@ -75,7 +78,7 @@ export default function InicioScreen() {
           <View style={styles.stats}>
             <Stat value={String(month.length)} label="ascensos" />
             <Stat value={String(largos)} label="largos" />
-            <Stat value={top ? top.grado : '–'} label="grado top" mono />
+            <Stat value={top ? displayGrade(top.grado, systems) : '–'} label="grado top" mono />
           </View>
         </View>
 
@@ -94,6 +97,11 @@ export default function InicioScreen() {
               {ascents.slice(0, 5).map((a, i) => (
                 <AscentRow key={a.id} a={a} first={i === 0} />
               ))}
+              {ascents.length > 5 && (
+                <Pressable onPress={() => router.navigate('/perfil')} style={{ paddingVertical: 11, borderTopWidth: 1, borderTopColor: c.line }}>
+                  <T variant="bold" color={c.accent}>Ver todo tu logbook ({ascents.length}) →</T>
+                </Pressable>
+              )}
             </Card>
           )}
         </View>
@@ -219,31 +227,11 @@ function Stat({ value, label, mono }: { value: string; label: string; mono?: boo
   );
 }
 
-function AscentRow({ a, first }: { a: Ascent; first: boolean }) {
-  const c = usePalette();
-  const tone = a.estilo === 'Flash' || a.estilo === 'A vista' ? 'ok' : a.estilo === 'Proyecto' ? 'warn' : 'neutral';
-  return (
-    <View style={[styles.ascent, !first && { borderTopWidth: 1, borderTopColor: c.line }]}>
-      <Grade>{a.grado}</Grade>
-      <View style={{ flex: 1 }}>
-        <T variant="bold" numberOfLines={1}>{a.ruta}</T>
-        <T variant="small" muted numberOfLines={1}>
-          {a.sector} · {a.tipo}
-          {a.largos > 1 ? ` · ${a.largos} largos` : ''}
-        </T>
-      </View>
-      <View style={{ alignItems: 'flex-end', gap: 3 }}>
-        <Chip tone={tone}>{a.estilo}</Chip>
-        <T variant="mono" muted style={{ fontSize: 12 }}>{shortDate(a.fecha)}</T>
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 40, gap: 14 },
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatarImg: { width: 42, height: 42 },
   hero: { borderRadius: Radius.lg, padding: 16, paddingBottom: 72, overflow: 'hidden', minHeight: 230 },
   heroCenter: { alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 24 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
@@ -288,5 +276,4 @@ const styles = StyleSheet.create({
   ctaTitle: { fontFamily: Fonts.display, fontSize: 21, textTransform: 'uppercase', letterSpacing: 0.4 },
   section: { marginTop: 10 },
   stats: { flexDirection: 'row', gap: 8 },
-  ascent: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11 },
 });

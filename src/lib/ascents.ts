@@ -1,14 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
- * Logbook guardado en el teléfono (AsyncStorage).
- * Más adelante esto se puede sincronizar con un servidor.
+ * Logbook guardado en el teléfono (AsyncStorage) cuando no has iniciado sesión.
+ * Con sesión iniciada, los ascensos viven en Supabase (ver src/lib/cloud.ts).
  */
 
 export const ROUTE_TYPES = ['Deportiva', 'Trad', 'Multilargo', 'Boulder'] as const;
 export const STYLES = ['A vista', 'Flash', 'Encadene', 'Top rope', 'Proyecto'] as const;
-export const FRENCH = ['5a', '5b', '5c', '6a', '6a+', '6b', '6b+', '6c', '6c+', '7a', '7a+', '7b', '7b+', '7c', '7c+', '8a', '8a+', '8b'];
-export const VSCALE = ['V0', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8', 'V9', 'V10'];
 export const SECTORS = ['Petrohué', 'Cochamó', 'El Manzano', 'Las Chilcas', 'Otro'];
 
 export type RouteType = (typeof ROUTE_TYPES)[number];
@@ -19,6 +17,7 @@ export type Ascent = {
   ruta: string;
   sector: string;
   tipo: RouteType;
+  /** Grado en escala base: francesa para vías, V para boulder (ver src/lib/grades.ts) */
   grado: string;
   estilo: ClimbStyle;
   /** Fecha local en formato AAAA-MM-DD */
@@ -38,22 +37,16 @@ export async function loadAscents(): Promise<Ascent[]> {
   }
 }
 
-export async function addAscent(input: Omit<Ascent, 'id'>): Promise<Ascent> {
-  const ascent: Ascent = { ...input, id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}` };
-  const all = await loadAscents();
-  all.unshift(ascent);
-  all.sort((a, b) => b.fecha.localeCompare(a.fecha));
+export async function saveAscents(all: Ascent[]) {
   await AsyncStorage.setItem(KEY, JSON.stringify(all));
-  return ascent;
 }
 
-export function gradesFor(tipo: RouteType) {
-  return tipo === 'Boulder' ? VSCALE : FRENCH;
+export function newAscentId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-/** Posición del grado en su escala; los boulder (V) no compiten con los franceses. */
-export function gradeRank(g: string) {
-  return g.startsWith('V') ? -1 : FRENCH.indexOf(g);
+export function sortAscents(all: Ascent[]) {
+  return [...all].sort((a, b) => b.fecha.localeCompare(a.fecha));
 }
 
 /** Fecha local AAAA-MM-DD, con días hacia atrás opcionales. */

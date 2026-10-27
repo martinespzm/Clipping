@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { Colors, Fonts } from '@/constants/theme';
+import { AppDataProvider } from '@/providers/app-data';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -38,23 +39,27 @@ export default function RootLayout() {
     colors: { ...base.colors, primary: c.accent, background: c.screen, card: c.surface, text: c.fg, border: c.line },
   };
 
+  const modal = (title: string) => ({
+    presentation: 'modal' as const,
+    headerShown: true,
+    title,
+    headerTitleStyle: { fontFamily: Fonts.display, fontSize: 20 },
+    headerStyle: { backgroundColor: c.surface },
+    headerTintColor: c.fg,
+  });
+
   return (
-    <ThemeProvider value={theme}>
-      <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="nuevo-ascenso"
-          options={{
-            presentation: 'modal',
-            headerShown: true,
-            title: 'Nuevo ascenso',
-            headerTitleStyle: { fontFamily: Fonts.display, fontSize: 20 },
-            headerStyle: { backgroundColor: c.surface },
-            headerTintColor: c.fg,
-          }}
-        />
-      </Stack>
-    </ThemeProvider>
+    <AppDataProvider>
+      <ThemeProvider value={theme}>
+        <StatusBar style="auto" />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="nuevo-ascenso" options={modal('Nuevo ascenso')} />
+          <Stack.Screen name="editar-perfil" options={modal('Editar perfil')} />
+          <Stack.Screen name="cuenta" options={modal('Tu cuenta')} />
+          <Stack.Screen name="ajustes" options={modal('Ajustes')} />
+        </Stack>
+      </ThemeProvider>
+    </AppDataProvider>
   );
 }

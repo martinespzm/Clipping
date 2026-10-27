@@ -1,31 +1,17 @@
-import { router } from 'expo-router';
-import { useState, type ReactNode } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { Link } from 'expo-router';
+import { useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Field, formStyles, GradePicker, Input, Options, Pill, PrimaryButton, StepButton } from '@/components/form';
 import { T } from '@/components/ui';
-import { Fonts, Radius } from '@/constants/theme';
+import { Fonts } from '@/constants/theme';
 import { usePalette } from '@/hooks/use-palette';
-import {
-  addAscent,
-  gradesFor,
-  localDate,
-  ROUTE_TYPES,
-  SECTORS,
-  shortDate,
-  STYLES,
-  type ClimbStyle,
-  type RouteType,
-} from '@/lib/ascents';
+import { localDate, ROUTE_TYPES, SECTORS, shortDate, STYLES, type ClimbStyle, type RouteType } from '@/lib/ascents';
+import { errorText } from '@/lib/errors';
+import { goBack } from '@/lib/navigation';
+import { BOULDER_SYSTEMS, baseGrades, displayGrade, ROUTE_SYSTEMS } from '@/lib/grades';
+import { useAppData } from '@/providers/app-data';
 
 function recentDates() {
   return [0, 1, 2, 3].map((n) => ({
@@ -37,9 +23,12 @@ function recentDates() {
 export default function NuevoAscensoScreen() {
   const c = usePalette();
   const insets = useSafeAreaInsets();
+  const { addAscent, systems, profile } = useAppData();
   const [DATES] = useState(recentDates);
+  // Primero los sectores del perfil, después los conocidos.
+  const [sectors] = useState(() => [...new Set([...profile.sectors, ...SECTORS.filter((s) => s !== 'Otro'), 'Otro'])]);
   const [ruta, setRuta] = useState('');
-  const [sector, setSector] = useState(SECTORS[0]);
+  const [sector, setSector] = useState(sectors[0]);
   const [otroSector, setOtroSector] = useState('');
   const [tipo, setTipo] = useState<RouteType>('Deportiva');
   const [grado, setGrado] = useState('6b+');
@@ -48,6 +37,7 @@ export default function NuevoAscensoScreen() {
   const [fecha, setFecha] = useState(DATES[0].value);
   const [notas, setNotas] = useState('');
   const [saving, setSaving] = useState(false);
+  const boulder = tipo === 'Boulder';
 
   function changeTipo(t: RouteType) {
     setTipo(t);
@@ -70,45 +60,31 @@ export default function NuevoAscensoScreen() {
         grado,
         estilo,
         fecha,
-        largos,
+        largos: boulder ? 1 : largos,
         notas: notas.trim() || undefined,
       });
-      router.back();
+      goBack();
     } catch (e) {
       setSaving(false);
-      Alert.alert('No se pudo guardar', e instanceof Error ? e.message : String(e));
+      Alert.alert('No se pudo guardar', errorText(e));
     }
   }
 
-  const input = [styles.input, { backgroundColor: c.surface, borderColor: c.line, color: c.fg }];
+  const systemLabel = boulder ? BOULDER_SYSTEMS[systems.boulder].label : ROUTE_SYSTEMS[systems.route].label;
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: c.screen }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
+        contentContainerStyle={[formStyles.content, { paddingBottom: insets.bottom + 24 }]}>
         <Field label="Nombre de la vía">
-          <TextInput
-            value={ruta}
-            onChangeText={setRuta}
-            placeholder="Ej. Fisura del Cóndor"
-            placeholderTextColor={c.muted}
-            style={input}
-            autoFocus
-            returnKeyType="done"
-          />
+          <Input value={ruta} onChangeText={setRuta} placeholder="Ej. Fisura del Cóndor" autoFocus returnKeyType="done" />
         </Field>
 
         <Field label="Sector">
-          <Options options={SECTORS} value={sector} onChange={setSector} />
+          <Options options={sectors} value={sector} onChange={setSector} />
           {sector === 'Otro' && (
-            <TextInput
-              value={otroSector}
-              onChangeText={setOtroSector}
-              placeholder="Nombre del sector"
-              placeholderTextColor={c.muted}
-              style={[input, { marginTop: 8 }]}
-            />
+            <Input value={otroSector} onChangeText={setOtroSector} placeholder="Nombre del sector" style={{ marginTop: 8 }} />
           )}
         </Field>
 
@@ -116,17 +92,26 @@ export default function NuevoAscensoScreen() {
           <Options options={ROUTE_TYPES} value={tipo} onChange={changeTipo} />
         </Field>
 
-        <Field label="Grado">
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-            {gradesFor(tipo).map((g) => (
-              <Pill key={g} label={g} selected={g === grado} onPress={() => setGrado(g)} mono />
-            ))}
-          </ScrollView>
+        <Field
+          label="Grado"
+          hint={
+            <Link href="/ajustes" asChild>
+              <T variant="small" color={c.accent} suppressHighlighting>
+                {systemLabel} · cambiar
+              </T>
+            </Link>
+          }>
+          <GradePicker
+            grades={baseGrades(boulder)}
+            value={grado}
+            onChange={(g) => g && setGrado(g)}
+            display={(g) => displayGrade(g, systems)}
+          />
         </Field>
 
-        {tipo !== 'Boulder' && (
+        {!boulder && (
           <Field label="Largos">
-            <View style={styles.stepper}>
+            <View style={formStyles.stepper}>
               <StepButton label="−" onPress={() => setLargos((n) => Math.max(1, n - 1))} />
               <T style={{ fontFamily: Fonts.monoBold, fontSize: 20, minWidth: 40, textAlign: 'center' }}>{largos}</T>
               <StepButton label="+" onPress={() => setLargos((n) => Math.min(40, n + 1))} />
@@ -139,7 +124,7 @@ export default function NuevoAscensoScreen() {
         </Field>
 
         <Field label="Fecha">
-          <View style={styles.wrap}>
+          <View style={formStyles.wrap}>
             {DATES.map((d) => (
               <Pill key={d.value} label={d.label} selected={d.value === fecha} onPress={() => setFecha(d.value)} />
             ))}
@@ -147,97 +132,11 @@ export default function NuevoAscensoScreen() {
         </Field>
 
         <Field label="Notas (opcional)">
-          <TextInput
-            value={notas}
-            onChangeText={setNotas}
-            placeholder="Beta, condiciones de la roca, con quién fuiste…"
-            placeholderTextColor={c.muted}
-            style={[input, { minHeight: 80, textAlignVertical: 'top' }]}
-            multiline
-          />
+          <Input value={notas} onChangeText={setNotas} placeholder="Beta, condiciones de la roca, con quién fuiste…" multiline />
         </Field>
 
-        <Pressable
-          onPress={save}
-          disabled={saving}
-          style={({ pressed }) => [styles.save, { backgroundColor: c.accent, opacity: pressed || saving ? 0.8 : 1 }]}>
-          <T style={styles.saveText} color={c.onAccent}>{saving ? 'Guardando…' : 'Guardar ascenso'}</T>
-        </Pressable>
+        <PrimaryButton label={saving ? 'Guardando…' : 'Guardar ascenso'} onPress={save} busy={saving} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <View style={{ gap: 6 }}>
-      <T variant="eyebrow" muted>{label}</T>
-      {children}
-    </View>
-  );
-}
-
-function Options<V extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: readonly V[];
-  value: V;
-  onChange: (v: V) => void;
-}) {
-  return (
-    <View style={styles.wrap}>
-      {options.map((o) => (
-        <Pill key={o} label={o} selected={o === value} onPress={() => onChange(o)} />
-      ))}
-    </View>
-  );
-}
-
-function Pill({ label, selected, onPress, mono }: { label: string; selected: boolean; onPress: () => void; mono?: boolean }) {
-  const c = usePalette();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      style={[
-        styles.pill,
-        { backgroundColor: selected ? c.fg : c.surface, borderColor: selected ? c.fg : c.line },
-      ]}>
-      <T
-        style={{ fontFamily: mono ? Fonts.monoBold : Fonts.bodySemi, fontSize: 14 }}
-        color={selected ? c.screen : c.fg}>
-        {label}
-      </T>
-    </Pressable>
-  );
-}
-
-function StepButton({ label, onPress }: { label: string; onPress: () => void }) {
-  const c = usePalette();
-  return (
-    <Pressable onPress={onPress} style={[styles.stepBtn, { backgroundColor: c.surface, borderColor: c.line }]}>
-      <T style={{ fontSize: 22, lineHeight: 24 }}>{label}</T>
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  content: { padding: 16, gap: 18 },
-  input: {
-    borderWidth: 1,
-    borderRadius: Radius.sm + 2,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    fontFamily: Fonts.body,
-    fontSize: 16,
-  },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  pill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 13, paddingVertical: 7 },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  stepBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  save: { borderRadius: Radius.md, paddingVertical: 15, alignItems: 'center', marginTop: 6 },
-  saveText: { fontFamily: Fonts.display, fontSize: 20, textTransform: 'uppercase', letterSpacing: 0.5 },
-});
